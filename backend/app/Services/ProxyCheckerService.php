@@ -7,9 +7,9 @@ use Illuminate\Support\Facades\Log;
 
 class ProxyCheckerService
 {
-    // Для HTTP/HTTPS прокси используем HTTP URL — не нужен CONNECT тоннель
+    // Для HTTP прокси используем HTTP URL — не нужен CONNECT тоннель
     private const CHECK_URL_HTTP  = 'http://api.ipify.org?format=json';
-    // Для SOCKS прокси можно использовать HTTPS
+    // Для SOCKS прокси используем HTTPS
     private const CHECK_URL_SOCKS = 'https://api.ipify.org?format=json';
 
     private const TIMEOUT = 15;
@@ -30,17 +30,16 @@ class ProxyCheckerService
                 : self::CHECK_URL_HTTP;
 
             curl_setopt_array($ch, [
-                CURLOPT_URL            => $checkUrl,
-                CURLOPT_PROXY          => $this->buildProxyUrl($proxy),
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => self::TIMEOUT,
-                CURLOPT_CONNECTTIMEOUT => self::TIMEOUT,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 3,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; ProxyChecker/1.0)',
-                // Явно указываем что это прокси-запрос
+                CURLOPT_URL             => $checkUrl,
+                CURLOPT_PROXY           => $this->buildProxyUrl($proxy),
+                CURLOPT_RETURNTRANSFER  => true,
+                CURLOPT_TIMEOUT         => self::TIMEOUT,
+                CURLOPT_CONNECTTIMEOUT  => self::TIMEOUT,
+                CURLOPT_FOLLOWLOCATION  => true,
+                CURLOPT_MAXREDIRS       => 3,
+                CURLOPT_SSL_VERIFYPEER  => false,
+                CURLOPT_SSL_VERIFYHOST  => 0,
+                CURLOPT_USERAGENT       => 'Mozilla/5.0 (compatible; ProxyChecker/1.0)',
                 CURLOPT_HTTPPROXYTUNNEL => 0,
             ]);
 
@@ -48,7 +47,6 @@ class ProxyCheckerService
                 curl_setopt($ch, CURLOPT_PROXYTYPE,
                     $proxy->protocol === 'socks5' ? CURLPROXY_SOCKS5 : CURLPROXY_SOCKS4
                 );
-                // Для SOCKS нужен тоннель
                 curl_setopt($ch, CURLOPT_HTTPPROXYTUNNEL, 1);
             }
 
@@ -65,19 +63,16 @@ class ProxyCheckerService
             $responseTimeMs = (int) round((microtime(true) - $startTime) * 1000);
 
             Log::debug("Proxy check [{$proxy->host}:{$proxy->port}]", [
-                'http_code'    => $httpCode,
-                'curl_errno'   => $curlErrNo,
-                'curl_error'   => $curlErrMsg,
-                'response_ms'  => $responseTimeMs,
-                'check_url'    => $checkUrl,
+                'http_code'   => $httpCode,
+                'curl_errno'  => $curlErrNo,
+                'curl_error'  => $curlErrMsg,
+                'response_ms' => $responseTimeMs,
+                'check_url'   => $checkUrl,
             ]);
 
-            // Прокси считается активным если:
-            // - нет ошибки cURL (errno 0 = успешное соединение)
-            // - И получен какой-либо HTTP ответ (httpCode > 0)
-            // Любой HTTP-код означает что прокси принял соединение и работает.
-            // Таймаут (errno 28) или отказ соединения (errno 7) = недоступен.
-            $isAlive = $curlErrNo === 0 && $httpCode > 0;
+            // Прокси активен если нет ошибки соединения (errno=0) и получен
+            // любой HTTP-ответ. Таймаут (28) или отказ (7) = недоступен.
+            $isAlive = ($curlErrNo === 0 && $httpCode > 0);
 
             if ($isAlive) {
                 $proxy->update([
@@ -89,6 +84,13 @@ class ProxyCheckerService
             }
 
             $proxy->update([
+                'status'           => 'inactive',
+                'response_time_ms' => null,
+                'last_checked_at'  => now(),
+            ]);
+            return false;
+
+        } catch (\Throwable $e) {
             Log::error("Proxy check exception [{$proxy->host}:{$proxy->port}]: " . $e->getMessage());
 
             $proxy->update([
