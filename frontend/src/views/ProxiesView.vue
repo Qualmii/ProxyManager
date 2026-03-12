@@ -33,8 +33,9 @@
           {{ opt.label }}
         </button>
       </div>
-      <div class="auto-refresh">
-        <span class="refresh-hint">Автообновление через {{ nextRefreshIn }}с</span>
+      <div class="ws-status">
+        <span class="ws-dot" :class="wsConnected ? 'ws-dot--on' : 'ws-dot--off'" />
+        {{ wsConnected ? 'Live' : 'Connecting…' }}
       </div>
     </div>
 
@@ -70,6 +71,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useProxyStore } from '@/stores/proxy'
 import ProxyTable from '@/components/ProxyTable.vue'
 import ProxyForm from '@/components/ProxyForm.vue'
+import echo from '@/echo.js'
 
 const store = useProxyStore()
 
@@ -163,26 +165,35 @@ async function handleDelete(id) {
   }
 }
 
-// --- Автообновление статусов каждые 30 сек ---
-// Нужно для отображения результатов ручной и автоматической проверки
-// без перезагрузки страницы. Бэкенд проверяет прокси каждые 5 мин,
-// фронтенд подхватывает обновлённые статусы этим поллингом.
-const REFRESH_INTERVAL = 30
-const nextRefreshIn = ref(REFRESH_INTERVAL)
-let refreshTimer = null
-let countdownTimer = null
+// --- WebSocket ---
+const wsConnected = ref(false)
+let wsChannel = null
 
-function startAutoRefresh() {
-  nextRefreshIn.value = REFRESH_INTERVAL
+function subscribeToUpdates() {
+  // Отслеживаем состояние соединения
+  echo.connector.pusher.connection.bind('connected', () => {
+    wsConnected.value = true
+  })
+  echo.connector.pusher.connection.bind('disconnected', () => {
+    wsConnected.value = false
+  })
+  echo.connector.pusher.connection.bind('unavailable', () => {
+    wsConnected.value = false
+  })
 
-  countdownTimer = setInterval(() => {
-    nextRefreshIn.value--
-    if (nextRefreshIn.value <= 0) nextRefreshIn.value = REFRESH_INTERVAL
-  }, 1000)
+  // Подписываемся на канал proxies
+  wsChannel = echo
+    .channel('proxies')
+    .listen('.proxy.status.updated', (event) => {
+      store.applyStatusUpdate(event.proxy)
+    })
+}
 
-  refreshTimer = setInterval(() => {
-    store.refreshStatuses()
-  }, REFRESH_INTERVAL * 1000)
+function unsubscribeFromUpdates() {
+  if (wsChannel) {
+    echo.leaveChannel('proxies')
+    wsChannel = null
+  }
 }
 
 // --- Toast ---
@@ -200,12 +211,11 @@ function showToast(message, type = 'info') {
 // --- Lifecycle ---
 onMounted(() => {
   store.fetchProxies(buildParams())
-  startAutoRefresh()
+  subscribeToUpdates()
 })
 
 onUnmounted(() => {
-  clearInterval(refreshTimer)
-  clearInterval(countdownTimer)
+  unsubscribeFromUpdates()
   clearTimeout(searchTimer)
 })
 </script>
@@ -235,7 +245,19 @@ onUnmounted(() => {
 .filter-btn:hover { background: #f3f4f6; }
 .filter-btn--active { background: #6366f1; color: #fff; border-color: #6366f1; }
 
-.refresh-hint { font-size: .78rem; color: #9ca3af; white-space: nowrap; }
+/* Индикатор WebSocket */
+.ws-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .78rem; font-weight: 600; color: #6b7280;
+  white-space: nowrap;
+}
+.ws-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.ws-dot--on  { background: #10b981; box-shadow: 0 0 0 2px #d1fae5; }
+.ws-dot--off { background: #f59e0b; box-shadow: 0 0 0 2px #fef3c7; animation: pulse .8s ease infinite alternate; }
+
+@keyframes pulse { to { opacity: .4; } }
 
 .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); overflow: hidden; }
 

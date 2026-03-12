@@ -75,6 +75,14 @@ export const useProxyStore = defineStore('proxy', () => {
     } catch (_) {}
   }
 
+  // Обновляем один прокси в списке (вызывается из WebSocket-события)
+  function applyStatusUpdate(updatedProxy) {
+    const idx = proxies.value.findIndex((p) => p.id === updatedProxy.id)
+    if (idx !== -1) {
+      proxies.value[idx] = { ...proxies.value[idx], ...updatedProxy }
+    }
+  }
+
   return {
     proxies,
     meta,
@@ -88,6 +96,7 @@ export const useProxyStore = defineStore('proxy', () => {
     checkProxy,
     checkAllProxies,
     refreshStatuses,
+    applyStatusUpdate,
   }
 })
 

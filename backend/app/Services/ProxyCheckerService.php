@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\ProxyStatusUpdated;
 use App\Models\Proxy;
 use Illuminate\Support\Facades\Log;
 
@@ -80,6 +81,7 @@ class ProxyCheckerService
                     'response_time_ms' => $responseTimeMs,
                     'last_checked_at'  => now(),
                 ]);
+                broadcast(new ProxyStatusUpdated($proxy->fresh()));
                 return true;
             }
 
@@ -88,6 +90,7 @@ class ProxyCheckerService
                 'response_time_ms' => null,
                 'last_checked_at'  => now(),
             ]);
+            broadcast(new ProxyStatusUpdated($proxy->fresh()));
             return false;
 
         } catch (\Throwable $e) {

@@ -29,6 +29,22 @@ services:
     networks:
       - proxy_manager_network
 
+  reverb:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: proxy_manager_reverb
+    volumes:
+      - ./backend:/var/www/html
+    ports:
+      - "6001:6001"
+    depends_on:
+      - php
+      - redis
+    command: php artisan reverb:start --host=0.0.0.0 --port=6001 --no-interaction
+    networks:
+      - proxy_manager_network
+
   worker:
     build:
       context: .

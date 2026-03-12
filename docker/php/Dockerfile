@@ -30,6 +30,9 @@ COPY backend/ .
 
 RUN composer install --no-dev --optimize-autoloader --no-interaction
 
+# Удаляем .env из образа — он монтируется через volume в docker-compose
+RUN rm -f .env
+
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 EXPOSE 9000
