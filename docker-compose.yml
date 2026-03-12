@@ -1,0 +1,112 @@
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: proxy_manager_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./backend:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - php
+    networks:
+      - proxy_manager_network
+
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: proxy_manager_php
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      - APP_ENV=local
+    networks:
+      - proxy_manager_network
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: proxy_manager_worker
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      - php
+      - redis
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    networks:
+      - proxy_manager_network
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: proxy_manager_scheduler
+    volumes:
+      - ./backend:/var/www/html
+    depends_on:
+      - php
+      - redis
+    command: >
+      sh -c "while true; do php artisan schedule:run --verbose --no-interaction & sleep 60; done"
+    networks:
+      - proxy_manager_network
+
+  mysql:
+    image: mysql:8.0
+    container_name: proxy_manager_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: proxy_manager
+      MYSQL_USER: proxy_user
+      MYSQL_PASSWORD: proxy_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proxy_manager_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: proxy_manager_redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - proxy_manager_network
+
+  frontend:
+    image: node:20-alpine
+    container_name: proxy_manager_frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    networks:
+      - proxy_manager_network
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  proxy_manager_network:
+    driver: bridge
+
