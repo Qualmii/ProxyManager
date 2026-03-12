@@ -1,5 +1,6 @@
 # Proxy Manager
 
+Тестовое задание для Advert Technology Solutions
 Приложение для управления списком прокси-серверов.
 
 ## Стек
