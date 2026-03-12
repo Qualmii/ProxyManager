@@ -24,8 +24,6 @@ class ProxyCheckerService
         try {
             $ch = curl_init();
 
-            // Для HTTP/HTTPS прокси используем HTTP URL чтобы избежать
-            // проблем с CONNECT тоннелем (не все прокси его поддерживают)
             $checkUrl = in_array($proxy->protocol, ['socks4', 'socks5'])
                 ? self::CHECK_URL_SOCKS
                 : self::CHECK_URL_HTTP;
@@ -55,7 +53,7 @@ class ProxyCheckerService
                 curl_setopt($ch, CURLOPT_PROXYUSERPWD, "{$proxy->username}:{$proxy->password}");
             }
 
-            $response   = curl_exec($ch);
+            curl_exec($ch);
             $httpCode   = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             $curlErrNo  = curl_errno($ch);
             $curlErrMsg = curl_error($ch);

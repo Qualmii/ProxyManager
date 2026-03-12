@@ -18,7 +18,6 @@ class ProxyStatusUpdated implements ShouldBroadcastNow
 
     public function __construct(Proxy $proxy)
     {
-        // Сериализуем через Resource чтобы отдать тот же формат что и REST API
         $this->proxy = (new ProxyResource($proxy))->resolve();
     }
 

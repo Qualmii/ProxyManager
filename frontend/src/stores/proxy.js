@@ -53,7 +53,6 @@ export const useProxyStore = defineStore('proxy', () => {
 
   async function checkAllProxies() {
     checkingAll.value = true
-    // Выставляем всем статус checking
     proxies.value.forEach((p) => (p.status = 'checking'))
     try {
       await proxyApi.checkAll()
